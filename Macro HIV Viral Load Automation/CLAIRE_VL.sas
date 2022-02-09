@@ -1,12 +1,7 @@
 ********************IMPORT previous VL data**************************;
 
-%let path=C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined;*change this to your own data path";
-%let file=2005_09_2021VLWF.csv;*change this to your previous data file";
-proc import datafile = "&path.\&file." out = vl_previous
-DBMS =  csv replace;
-run;
-
-*ignore this part;
+%let path=H:\SOM Work;*change this to your own data path";
+%let file=2005_07_2020VLWF.csv;*change this to your previous data file";
     data WORK.VL_PREVIOUS;
       %let _EFIERR_ = 0; /* set the ERROR detection macro variable */
       infile "&path.\&file" delimiter = ',' MISSOVER DSD
@@ -16,7 +11,7 @@ run;
          informat LAB $19. ;
          informat RESULT_ORIGINAL $20. ;
          informat Viralload_coded best32. ;
-         informat NewdeIDlabdate date9. ;
+         informat NewdeIDlabdate mmddyy10. ;
          informat year best32. ;
          informat month best32. ;
          informat quarter best32. ;
@@ -25,8 +20,8 @@ run;
          format LAB $19. ;
          format RESULT_ORIGINAL $20. ;
          format Viralload_coded best12. ;
-         format NewdeIDlabdate date9. ;
-         format year best32. ;
+         format NewdeIDlabdate mmddyy10. ;
+         format year best12. ;
          format month best12. ;
          format quarter best12. ;
       input
@@ -42,18 +37,14 @@ run;
       ;
       if _ERROR_ then call symputx('_EFIERR_',1);  /* set ERROR detection macro variable */
       run;
-
-	  *start from here;
 proc print data=WORK.VL_previous (obs=20);
 run;
-
-
 
 *********** Import newest data ***********;
 
 
 PROC IMPORT OUT= WORK.VL_new                        
-                        DATAFILE= "C:\Users\china\Downloads\vl.xlsx" 
+                        DATAFILE= "H:\SOM Work\LOGVL_AUG_DEC2020.xlsx" 
                         DBMS=EXCEL REPLACE;
                  GETNAMES=yes;
                  MIXED=no;
@@ -63,43 +54,47 @@ PROC IMPORT OUT= WORK.VL_new
 				 
             RUN;
 	
-
-
-data vl_new;
-set vl_new;
-format NewdeIDlabdate MMDDYY10.;
+	
+PROC EXPORT DATA= WORK.VL_new
+            OUTFILE= "H:\SOM Work\LOGVL_AUG_DEC2020.csv" 
+            DBMS=CSV REPLACE;
+		
+     PUTNAMES=YES;
 RUN;
 
-proc print data =vl_new(obs=20);
+
+proc print data =WORK.VL_new(obs=20);
 run;
 
 
 
 
+data vl_new;
+set WORK.VL_new;
+if RESULT_ORIGINAL="Not detected" or RESULT_ORIGINAL="Not Detected" or RESULT_ORIGINAL="not detected" then Viralload_coded=0.001; *recoded;
+	else if RESULT_ORIGINAL="<1.60" or RESULT_ORIGINAL="< 1.60" then Viralload_coded=1.59;
+		else if RESULT_ORIGINAL="> 7.00" then Viralload_coded=7.01;
+		else Viralload_coded=RESULT_ORIGINAL;
+run;
+data vl_new;
+set WORK.VL_new;
+if month=12 then month=11;
+run;
 
+proc print data =vl_new(obs=20);
+run;
 
 **************************************** check and clean variables *******************************;
 title "QC: whether every records has viral load";
 proc means data=vl_new nmiss mean std min max;
 vars Viralload_coded ;
 run;
-title;
 
 
 title "QC: which viral loads are missing";
 proc print  data=vl_new;
 where Viralload_coded=. or SID=.;
 run;
-title;
-
-*ignore this;
-data vl_new;
-set vl_new;
-rename NewdelDlabdate=NewdeIDlabdate;
-run;
-title;
-
-
 
 title "QC: viral loads are from what time period";
 proc sql;
@@ -141,7 +136,6 @@ data work.match;
 set vl_new;
 if Viralload_coded ne RESULT_ORIGINAL;
 run;
-
 proc freq data=work.match;
 tables Viralload_coded*RESULT_ORIGINAL;
 run;
@@ -174,7 +168,7 @@ data vl_new_2;
 set vl_new_1;
 by SID NewdeIDlabdate;
 retain count;
-if first.SID or first.NewdelDlabdate then count=0;
+if first.SID or first.NewdeIDlabdate then count=0;
 count+1;
 run;
 
@@ -197,7 +191,7 @@ by SID NewdeIDlabdate descending Viralload_coded;
 run;
 
 proc sort data=vl_new_2 nouniquekeys uniqueout=singles_vl out=dups_vl;
-by SID NewdeIDlabdate;
+by SID NewdeIDlabdate ;
 run;
 
 title "check dups";
@@ -229,17 +223,17 @@ title;
 
 data dup3;
 set dup2(drop=year month quarter);
-	informat NewdelDlabdate1 mmddyy10.;
-	format NewdelDlabdate1 mmddyy10.;
-	NewdelDlabdate1=intnx('day',NewdelDlabdate,-1); 
-	year=year(NewdelDlabdate1);
-	month=month(NewdelDlabdate1);
+	informat NewdeIDlabdate1 mmddyy10.;
+	format NewdeIDlabdate1 mmddyy10.;
+	NewdeIDlabdate1=intnx('day',NewdeIDlabdate,-1); 
+	year=year(NewdeIDlabdate1);
+	month=month(NewdeIDlabdate1);
 	if month in (1,2,3) then quarter=1;
 	if month in (4,5,6) then quarter=2;
 	if month in (7,8,9) then quarter=3;
 	if month in (10,11,12) then quarter=4;
 	
-	drop NewdelDlabdate;
+	drop NewdeIDlabdate;
 run;
 
 title "check dup3 if date is moved one day prior";
@@ -248,7 +242,7 @@ run;
 title;
 
 data vlmerge;
-set singles_vl dups_vl_diff dup2;
+set singles_vl dups_vl_diff dup3(rename=NewdeIDlabdate1=NewdeIDlabdate);
 drop count diff;
 run;
 
@@ -258,7 +252,7 @@ set vlmerge;
 run;
 
 proc sort nodupkey data=vlmerge_check dupout=qc;
-by SID NewdeIDlabdate;
+by SID NewdeIDlabdate ;
 run;
 proc print data=qc;
 run;
@@ -353,44 +347,30 @@ run;
 title;
 
 data vlmerge;
-set singles_vl dups_vl_diff_2 dup5;
+set singles_vl dups_vl_diff_2 dup6(rename=NewdeIDlabdate1=NewdeIDlabdate);
 drop count diff;
 run;
 
-data vlmerge1(drop= NewdeIDlabdate);
-set vlmerge;
-run;
 
 *************************** combine the files and please check the numbers of combined ***************************;
 data vlfinal;
 set WORK.VL_previous vlmerge;
 run;
-%let path=C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined;*change this to your own data path";
-%let year=2021; *change to the year of data";
+%let path=H:\SOM Work;*change this to your own data path";
+%let year=2020; *change to the year of data";
 %let month=12;  *change to the season of data";
 proc export data=vlfinal
-dbms=csv replace
+dbms=csv
 outfile="&path.\2005_&month._&year.VLWF.csv"; *change the path to whatever you like;
 run;
 
 
-data vlfinal (drop= VAR1 NewdelDlabdate);
-set vlfinal;
-run;
-
-proc print data=vlfinal (obs=20);
-run;
-
 ********************************************************************************************************
 *********************************frequency tables of VL for recent three years**************************;
 
-%let year1=2019;*change to 2 years before;
-%let year2=2020;*change to 1 year before;
-%let year3=2021;*change to the year of the data;
-
-
-
-
+%let year1=2018;*change to 2 years before;
+%let year2=2019;*change to 1 year before;
+%let year3=2020;*change to the year of the data;
 *generate data for each month of each year;
 %macro Viralload (year);
 	data a; *filter to certain year and month;
@@ -401,7 +381,7 @@ run;
 	data a;
 	set a;
 	if Viralload_coded~=.; *removing missing viral load;
-	month_name=put(NewdeIDlabdate, monname3.);
+	month_name=put(NewdeIDlabdate, monname.);
 	run;
 
 	proc sort data=a ; *check if there is any duplicate records for the same pts on the same date;
