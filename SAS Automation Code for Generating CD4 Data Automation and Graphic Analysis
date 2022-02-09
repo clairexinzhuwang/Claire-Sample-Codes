@@ -1,0 +1,596 @@
+%macro importcd4 (path, file, year, month);
+data WORK.CD4_&year._&month.;
+%let _EFIERR_=0;
+infile "&path.\&file" delimiter="," MISSOVER DSD lrecl=32767 firstobs=2;
+          informat SID best32. ; *change variable names if appropriate;
+          informat DESCRIPTION $30. ;*change variable names if appropriate;
+          informat LAB $28. ;*change variable names if appropriate;
+          informat RESULT_ORIGINAL best32. ;*change variable names if appropriate;
+          informat NEW_DEID_monthdate mmddyy10. ;*change variable names if appropriate;
+          informat year best32.;
+		  informat month best32.;
+		  informat quarter best32.;
+		  
+          format SID best12. ;*change variable names if appropriate;
+          format DESCRIPTION $30. ;*change variable names if appropriate;
+          format LAB $28. ;*change variable names if appropriate;
+          format RESULT_ORIGINAL best12. ;*change variable names if appropriate;
+          format NEW_DEID_monthdate mmddyy10. ;*change variable names if appropriate;
+          format year best12.;
+		  format month best12.;
+		  format quarter best12.;
+		  input
+		        SID 
+                   DESCRIPTION  $
+                   LAB  $
+                   RESULT_ORIGINAL
+                   NEW_DEID_monthdate
+				   year
+				   month
+				   quarter
+				   ;
+				   if _ERROR_ then call symputx('_EFIERR_',1);  /* set ERROR detection macro variable */
+       run;
+	   title "Check if everything goes right";
+	   proc print data=WORK.CD4_&year._&month.(obs=100);
+	   run;
+	   title;
+	   %mend;
+%importcd4(C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined,2005_9_2021CD4WF_mean.csv,2021,9);
+
+
+%let year=2021;
+%let month=9;
+	   data WORK.CD4_&year._&month.;
+	   set WORK.CD4_&year._&month.;
+	   year=year(NEW_DEID_monthdate);
+	   month=month(NEW_DEID_monthdate);
+	   if month in (1,2,3) then quarter=1;
+	   if month in (4,5,6) then quarter=2;
+	   if month in (7,8,9) then quarter=3;
+	   if month in (10,11,12) then quarter=4;
+	   run;
+
+
+	   title "Check if there is patients with SID 11000";
+	   proc print data=WORK.CD4_&year._&month.;
+	   where SID=11000;
+	   run;
+	   title;
+
+
+	   title "QC:whether every records has CD4";
+	   proc means data=WORK.CD4_&year._&month. nmiss mean std min max;
+	   vars RESULT_ORIGINAL;
+run;
+title;
+
+
+  title "QC:which are missing";
+  proc print data=WORK.CD4_&year._&month.;
+  where RESULT_ORIGINAL=. OR SID=.;
+  run;
+  title;
+
+
+  title "QC:CD4 are from what time period";
+  proc sql;
+  select min(NEW_DEID_monthdate) as from_dt format mmddyy8.,max(NEW_DEID_monthdate) as to_dt format mmddyy8. from WORK.CD4_&year._&month.;
+  quit;
+  title;
+
+
+  title "check year and month";
+  proc freq data=WORK.CD4_&year._&month.;
+  tables year*month;
+  run;
+  title;
+
+
+  data WORK.CD4_&year._&month._1;
+  set WORK.CD4_&year._&month.;
+  if RESULT_ORIGINAL=. or SID=. then delete;
+  if SID=11000 then delete;
+  run;
+
+  proc sort nodupkey data=WORK.CD4_&year._&month._1 dupout=dup1;
+  by SID NEW_DEID_monthdate RESULT_ORIGINAL;
+  run;
+
+  title "QC:same patient with same cd4 on the same date";
+  proc print data=dupl;
+  title;
+
+  
+  proc sort data=WORK.CD4_&year._&month._1;
+  by SID NEW_DEID_monthdate;
+  run;
+
+  data WORK.CD4_&year._&month._2;
+  set WORK.CD4_&year._&month._1;
+  by SID NEW_DEID_monthdate;
+  retain count;
+  if first.SID Or first.NEW_DEID_monthdate then count=0;
+  count+1;
+  run;
+
+  title "QC: WARNING!!! same patient with ge 2 cd4 on the same date";
+  proc print data=WORK.CD4_&year._&month._2;
+  where COUNT ge 2;
+  run;
+
+
+  data gc;
+  set WORK.CD4_&year._&month._2;
+  where COUNT ge 2;
+  run;
+
+  title;
+  proc sort data=WORK.CD4_&year._&month._2 nouniquekeys uniqueout=singles_cd4 out=dups_cd4;
+  by SID NEW_DEID_monthdate;
+  run;
+
+
+PROC IMPORT OUT= WORK.new                        
+                        DATAFILE= "C:\Users\china\Downloads\cd4.xlsx" 
+                        DBMS=EXCEL REPLACE;
+                 GETNAMES=YES;
+                 MIXED=No;
+                 SCANTEXT=YES;
+                 USEDATE=YES;
+                 SCANTIME=YES;
+            RUN;
+	
+	
+PROC EXPORT DATA= WORK.new
+            OUTFILE= "C:\Users\china\Downloads\new.csv" 
+            DBMS=CSV REPLACE;
+     PUTNAMES=YES;
+RUN;
+
+proc print data=new;
+run;
+
+data  WORK.new;
+infile "C:\Users\china\Downloads\new.csv" delimiter="," MISSOVER DSD lrecl=32767 firstobs=2;
+          informat SID best32. ; *change variable names if appropriate;
+          informat DESCRIPTION $30. ;*change variable names if appropriate;
+          informat LAB $28. ;*change variable names if appropriate;
+          informat RESULT_ORIGINAL best32. ;*change variable names if appropriate;
+          informat NEW_DEID_monthdate date9. ;*change variable names if appropriate;
+          informat year best32.;
+		  informat month best32.;
+		  informat quarter best32.;
+		  
+          format SID best12. ;*change variable names if appropriate;
+          format DESCRIPTION $30. ;*change variable names if appropriate;
+          format LAB $28. ;*change variable names if appropriate;
+          format RESULT_ORIGINAL best32. ;*change variable names if appropriate;
+          format NEW_DEID_monthdate mmddyy10. ;*change variable names if appropriate;
+          format year best12.;
+		  format month best12.;
+		  format quarter best12.;
+		  input
+		        SID 
+                   DESCRIPTION  $
+                   LAB  $
+                   RESULT_ORIGINAL
+                   NEW_DEID_monthdate
+				   year
+				   month
+				   quarter
+				   ;
+				   if _ERROR_ then call symputx('_EFIERR_',1);  /* set ERROR detection macro variable */
+       run;
+PROC print data=WORK.new;
+run;
+
+
+PROC print data=work.new(obs=20);
+run;
+
+
+	   title "Check if there is patients with SID 11000";
+	   proc print data=WORK.new;
+	   where SID=11000;
+	   run;
+	   title;
+
+	   title "QC:whether every records has CD4";
+	   proc means data=WORK.new nmiss mean std min max;
+	   vars RESULT_ORIGINAL;
+run;
+title;
+
+  title "QC:which are missing";
+  proc print data=WORK.new;
+  where RESULT_ORIGINAL=. OR SID=.;
+  run;
+  title;
+
+  title "QC:CD4 are from what time period";
+  proc sql;
+  select min(NEW_DEID_monthdate) as from_dt format mmddyy8.,max(NEW_DEID_monthdate) as to_dt format mmddyy8. from WORK.new;
+  quit;
+  title;
+
+  title "check year and month";
+  proc freq data=work.new;
+  tables year*month;
+  run;
+ 
+
+
+  data work.new1;
+  set work.new;
+  if RESULT_ORIGINAL=. or SID=. then delete;
+  if SID=11000 then delete;
+  run;
+
+
+  proc sort nodupkey data=work.new1 dupout=dup1;
+  by SID NEW_DEID_monthdate RESULT_ORIGINAL;
+  run;
+
+  title "QC:same patient with same cd4 on the same date";
+  proc print data=work.dup1;
+  run;
+  title;
+
+  
+  proc sort data=work.new1;
+  by SID NEW_DEID_monthdate;
+  run;
+
+  proc print data=work.new1;
+  where SID in ();
+  run;
+
+  data work.new2;
+  set work.new1;
+  by SID NEW_DEID_monthdate;
+  retain count;
+  if first.SID Or first.NEW_DEID_monthdate then count=0;
+  count+1;
+  run;
+
+  title "QC: WARNING!!! same patient with ge 2 cd4 on the same date";
+  proc print data=work.new2;
+  where COUNT ge 2;
+  run;
+  title;
+
+
+  data gc;
+  set work.new2;
+  where COUNT ge 2;
+  run;
+  
+
+  proc sort data=work.new2 nouniquekeys uniqueout=singles_cd4 out=dups_cd4;
+  by SID NEW_DEID_monthdate;
+  run;
+
+  proc print data=singles_cd4(obs=10);
+  run;
+
+  *dups_cd4 need to be printed in the report;
+PROC print DATA=dups_cd4;
+run;
+
+proc sort data=dups_cd4;
+by SID NEW_DEID_monthdate;
+run;
+
+proc sql;
+create table sum as
+select *, sum(RESULT_ORIGINAL) as total_result, count(RESULT_ORIGINAL) as count_result
+from dups_cd4
+group by SID, NEW_DEID_monthdate;
+quit;
+
+
+title "sum and count of the duplicates";
+proc print data=sum;
+run;
+title;
+
+proc sql;
+create table min as
+select *, min(RESULT_ORIGINAL) as lower_result, count(RESULT_ORIGINAL) as count_result
+from dups_cd4
+group by SID, NEW_DEID_monthdate;
+quit;
+
+title "min of the duplicates";
+proc print data=min;
+run;
+title;
+
+data cd4_dups_new_min;
+set min;
+by SID;
+format lower_result best12.;
+drop count total_result count_result RESULT_ORIGINAL;
+run;
+
+
+data cd4_dups_new_mean;
+set sum;
+by SID;
+format cd4_mean best12.;
+cd4_mean=total_result/count_result;
+drop count total_result count_result RESULT_ORIGINAL;
+run;
+
+proc print data=cd4_dups_new_mean;
+run;
+
+
+*  observations in cd4_dups_new;
+proc sort nodupkey data=cd4_dups_new_mean dupout=dup_5;
+by SID NEW_DEID_monthdate;
+run;
+proc sort nodupkey data=cd4_dups_new_min dupout=dup_a;
+by SID NEW_DEID_monthdate;
+run;
+
+
+
+data cd4final1;
+set singles_cd4(drop=count) cd4_dups_new_mean (rename=(cd4_mean= RESULT_ORIGINAL));
+by SID;
+run;
+
+data cd4final2;
+set singles_cd4(drop=count) cd4_dups_new_min (rename=(lower_result= RESULT_ORIGINAL));
+by SID;
+run;
+
+
+title "check if there is still duplicates";
+proc sort nodupkey data=cd4final1 dupout=dups_final1;
+by SID NEW_DEID_monthdate;
+run;
+title;
+
+
+title "check if there is still duplicates";
+proc sort nodupkey data=cd4final2 dupout=dups_final2;
+by SID NEW_DEID_monthdate;
+run;
+title;
+
+
+
+  data final1;
+  set WORK.CD4_2021_9 cd4final1;
+  by SID;
+  run;
+  data final2;
+  set WORK.CD4_2021_9 cd4final2;
+  by SID;
+  run;
+
+  
+  %let year=2021;
+  %let month=12;
+  proc export data=final1
+  dbms=csv
+  outfile="C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined\2005_&month._&year.CD4WF_mean.csv";
+  proc export data=final2
+  dbms=csv
+  outfile="C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined\2005_&month._&year.CD4WF_min.csv";
+
+
+
+  **********************************************************************************************************
+*********************************frequency tables of CD4 for recent three years**************************;
+
+
+%let year1=2019;*change to 2 years before;
+%let year2=2020;*change to 1 year before;
+%let year3=2021;*change to the year of the data;
+*generate data for each month of each year;
+%macro CD4 (year);
+	data a; *filter to certain year and month;
+	set final1;
+	if year=&year;
+	run;
+
+	data value_&year;
+	set a;
+	if RESULT_ORIGINAL~=.; *removing missing CD4;
+	month_name=put(NEW_DEID_monthdate, monname.);
+	run;
+    
+	
+	proc sort data=value_&year ; *check if there is any duplicate records for the same pts on the same date;
+	by SID NEW_DEID_monthdate;
+	run;
+
+	proc sql;
+    create table freq&year as
+	select month, month_name, count(SID) as Total_CD4_&year, mean(RESULT_ORIGINAL)as Mean_CD4value_&year, std(RESULT_ORIGINAL) as CD4_std_&year
+    from value_&year
+	group by month, month_name
+    order by month, month_name; 
+	quit;
+    
+    title "freq&year tables";
+	proc print data=freq&year;
+	run;
+	title;
+
+
+**************** transpose ***************;
+
+/*proc transpose data=freq&year(drop=month)
+				out=CD4&year
+				name=CD4_year 
+;
+var Total_CD4_&year ;
+id month_name;
+run;
+proc print data=CD4&year;
+run;*/
+
+
+%mend CD4;
+%CD4(&year1.);
+%CD4(&year2.);
+%CD4(&year3.);
+
+
+************** output frequency tables ****************;
+
+title "frequency table with months as rows ";
+data frequency_vertical;
+merge freq&year1. freq&year2. freq&year3.;
+drop month;
+run;
+proc print data=frequency_vertical;
+var month_name Total_CD4_&year1. Total_CD4_&year2. Total_CD4_&year3.; 
+run;
+title;
+
+proc export data=frequency_vertical
+dbms=csv
+outfile="C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined\2005_&month._&year.CD4_frequency.csv"; *change the path to your path;
+run;
+ 
+
+*******************************************  graphs **************************************************;
+
+**********************last three years graph with the corresponding months of the year***********************;
+**********************in the graph, display total num of CD4 and CD4 gt 2.3, and CD4 le 2.3  for last three years **********;
+
+ods rtf file="C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined\CD4 graphic summary report_&month.&year._dupmean.rtf"; *change the path to your path;
+
+title "Overall CD4 Number Over Year &year1., &year2., and &year3.";
+proc sgplot data=frequency_vertical;
+xaxis type=discrete;
+  series x=month_name y=Total_CD4_&year1./datalabel;
+  series x=month_name y=Total_CD4_&year2./datalabel;
+  series x=month_name y=Total_CD4_&year3./datalabel;
+ run;
+ title;
+
+title "Averagre CD4 Values Over Year &year1., &year2., and &year3.";
+proc sgplot data=frequency_vertical;
+xaxis type=discrete;
+  series x=month_name y=Mean_CD4value_&year1./datalabel;
+  series x=month_name y=Mean_CD4value_&year2./datalabel;
+  series x=month_name y=Mean_CD4value_&year3./datalabel;
+ run;
+ title;
+
+
+ods rtf close;
+
+
+%let year1=2019;*change to 2 years before;
+%let year2=2020;*change to 1 year before;
+%let year3=2021;*change to the year of the data;
+*generate data for each month of each year;
+%macro CD4 (year);
+	data a; *filter to certain year and month;
+	set final2;
+	if year=&year;
+	run;
+
+	data value_&year;
+	set a;
+	if RESULT_ORIGINAL~=.; *removing missing CD4;
+	month_name=put(NEW_DEID_monthdate, monname.);
+	run;
+    
+	
+	proc sort data=value_&year ; *check if there is any duplicate records for the same pts on the same date;
+	by SID NEW_DEID_monthdate;
+	run;
+
+	proc sql;
+    create table freq&year as
+	select month, month_name, count(SID) as Total_CD4_&year, mean(RESULT_ORIGINAL)as Mean_CD4value_&year, std(RESULT_ORIGINAL) as CD4_std_&year
+    from value_&year
+	group by month, month_name
+    order by month, month_name; 
+	quit;
+    
+    title "freq&year tables";
+	proc print data=freq&year;
+	run;
+	title;
+
+
+**************** transpose ***************;
+
+/*proc transpose data=freq&year(drop=month)
+				out=CD4&year
+				name=CD4_year 
+;
+var Total_CD4_&year ;
+id month_name;
+run;
+proc print data=CD4&year;
+run;*/
+
+
+%mend CD4;
+%CD4(&year1.);
+%CD4(&year2.);
+%CD4(&year3.);
+
+
+************** output frequency tables ****************;
+
+title "frequency table with months as rows ";
+data frequency_vertical;
+merge freq&year1. freq&year2. freq&year3.;
+drop month;
+run;
+proc print data=frequency_vertical;
+var month_name Total_CD4_&year1. Total_CD4_&year2. Total_CD4_&year3.; 
+run;
+title;
+
+proc export data=frequency_vertical
+dbms=csv
+outfile="C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined\2005_&month._&year.CD4_frequency.csv"; *change the path to your path;
+run;
+
+
+*******************************************  graphs **************************************************;
+
+**********************last three years graph with the corresponding months of the year***********************;
+**********************in the graph, display total num of CD4 and CD4 gt 2.3, and CD4 le 2.3  for last three years **********;
+
+ods rtf file="C:\Users\china\OneDrive - Emory University\XINZHU WORK FOLDER\Final Working Combined\CD4 graphic summary report_&month.&year._dupmin.rtf"; *change the path to your path;
+
+title "Overall CD4 Number Over Year &year1., &year2., and &year3.";
+proc sgplot data=frequency_vertical;
+xaxis type=discrete;
+  series x=month_name y=Total_CD4_&year1./datalabel;
+  series x=month_name y=Total_CD4_&year2./datalabel;
+  series x=month_name y=Total_CD4_&year3./datalabel;
+ run;
+ title;
+
+title "Averagre CD4 Values Over Year &year1., &year2., and &year3.";
+proc sgplot data=frequency_vertical;
+xaxis type=discrete;
+  series x=month_name y=Mean_CD4value_&year1./datalabel;
+  series x=month_name y=Mean_CD4value_&year2./datalabel;
+  series x=month_name y=Mean_CD4value_&year3./datalabel;
+ run;
+ title;
+
+
+ods rtf close;
+
+
+
+ 
+
+ 
